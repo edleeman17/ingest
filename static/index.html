@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#fcfcfc">
+<link rel="manifest" href="/manifest.json">
+<title>Ingest</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:hsl(0 0% 99%);--bg2:hsl(0 0% 97%);--bg3:hsl(0 0% 93%);
+  --border:hsl(0 0% 88%);--text:hsl(0 0% 8%);--muted:hsl(0 0% 42%);
+  --success:hsl(145 55% 32%);--error:hsl(0 72% 38%);
+  --font:ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace;
+}
+body{font-family:var(--font);font-size:1rem;background:var(--bg);color:var(--text);min-height:100vh}
+header{border-bottom:1px solid var(--border);padding:1rem 1.5rem;display:flex;align-items:center;gap:0.75rem;position:sticky;top:0;background:var(--bg);z-index:10}
+header h1{font-size:1rem;font-weight:700;flex:1}
+.btn{background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:0.375rem 0.75rem;font:inherit;font-size:0.875rem;cursor:pointer;color:var(--text);transition:background 150ms}
+.btn:hover{background:var(--bg3)}
+main{max-width:900px;margin:0 auto;padding:1.5rem}
+.filters{display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1.5rem;align-items:center}
+.chip{font:inherit;font-size:0.875rem;padding:0.25rem 0.75rem;border-radius:4px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;color:var(--muted);transition:all 150ms}
+.chip:hover{background:var(--bg3);color:var(--text)}.chip.active{background:var(--text);color:var(--bg);border-color:var(--text)}
+.count{font-size:0.875rem;color:var(--muted);margin-left:auto}
+.group{border:1px solid var(--border);border-radius:4px;margin-bottom:1.5rem;background:var(--bg2)}
+.group-header{display:flex;align-items:center;gap:0.5rem;padding:0.625rem 0.875rem;border-bottom:1px solid var(--border)}
+.group-name{font-size:0.875rem;font-weight:600;flex:1;cursor:text;outline:none;background:transparent;border:none;font-family:var(--font);color:var(--text)}
+.group-name:focus{text-decoration:underline}
+.group-del{font-size:0.75rem;color:var(--muted);background:none;border:none;cursor:pointer;padding:0.125rem 0.375rem;border-radius:4px;transition:all 150ms}
+.group-del:hover{color:var(--error);background:var(--bg3)}
+.group-body{padding:0.5rem}
+.group-body .items{display:flex;flex-direction:column;gap:0.5rem;min-height:2rem}
+.group.drag-over-group{border-color:var(--text);background:var(--bg3)}
+.drop-indicator{height:2px;background:var(--text);border-radius:1px;pointer-events:none;margin:1px 0;flex-shrink:0}
+.ungrouped{display:flex;flex-direction:column;gap:0.75rem;margin-bottom:1.5rem}
+.section-label{font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:.05em}
+.item{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:0.875rem;display:grid;grid-template-columns:1.5rem 1fr;gap:0.75rem;align-items:start;cursor:grab;transition:opacity 150ms,border-color 150ms;user-select:none;-webkit-user-select:none}
+.group .item{background:var(--bg)}
+.item:active{cursor:grabbing}
+.item.dragging{opacity:0.4}
+.item.drag-over-item{border-color:var(--text)}
+.item.done{opacity:0.4}
+.item.done .summary{text-decoration:line-through}
+.cb{width:1.25rem;height:1.25rem;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;appearance:none;flex-shrink:0;margin-top:0.15rem;transition:all 150ms;position:relative}
+.cb:checked{background:var(--success);border-color:var(--success)}
+.cb:checked::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:white;font-size:0.75rem;line-height:1.25rem;text-align:center}
+.item-body{display:flex;flex-direction:column;gap:0.375rem;min-width:0}
+.summary{font-size:0.9375rem;font-weight:600;word-break:break-word}
+.raw{font-size:0.8125rem;color:var(--muted);border-left:1px solid var(--border);padding-left:0.625rem;white-space:pre-wrap;word-break:break-word;font-style:italic;max-height:4rem;overflow:hidden;cursor:pointer;transition:max-height 200ms}
+.raw.expanded{max-height:none}
+.meta{display:flex;gap:0.375rem;flex-wrap:wrap;align-items:center;font-size:0.75rem;color:var(--muted)}
+.source-badge{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:0.1rem 0.35rem}
+.tag::before{content:'#'}
+.ungroup-btn{margin-left:auto;background:none;border:none;font:inherit;font-size:0.75rem;color:var(--muted);cursor:pointer;padding:0;transition:color 150ms}
+.ungroup-btn:hover{color:var(--text)}
+.empty{text-align:center;color:var(--muted);padding:3rem;font-size:0.875rem}
+.load-more{width:100%;margin-top:1rem;padding:0.75rem;font:inherit;font-size:0.875rem;background:var(--bg2);border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--muted);transition:all 150ms}
+.load-more:hover{background:var(--bg3);color:var(--text)}
+#drag-ghost{position:fixed;pointer-events:none;z-index:1000;opacity:0.8;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:100;display:flex;align-items:center;justify-content:center}
+.modal{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1.5rem;width:min(320px,90vw);display:flex;flex-direction:column;gap:1rem}
+.modal h2{font-size:1rem;font-weight:700}
+.modal input{width:100%;padding:0.75rem;font:inherit;background:var(--bg2);border:1px solid var(--border);border-radius:4px;color:var(--text)}
+.modal-btns{display:flex;gap:0.5rem;justify-content:flex-end}
+.btn-primary{background:var(--text);color:var(--bg);border-color:var(--text)}
+.btn-primary:hover{opacity:0.85;background:var(--text)}
+</style>
+</head>
+<body>
+<header>
+  <h1>ingest</h1>
+  <button class="btn" id="refreshBtn">↺</button>
+</header>
+<main>
+  <div class="filters" id="filters">
+    <button class="chip active" data-done="">all</button>
+    <button class="chip" data-done="0">todo</button>
+    <button class="chip" data-done="1">done</button>
+    <span style="width:1px;height:1.25rem;background:var(--border);display:inline-block"></span>
+    <button class="chip active" data-source="">all sources</button>
+    <span class="count" id="count"></span>
+  </div>
+  <div id="groups-container"></div>
+  <div class="ungrouped" id="ungrouped"></div>
+  <button class="load-more" id="loadMore" style="display:none">load more</button>
+</main>
+<div class="modal-backdrop" id="modal" style="display:none">
+  <div class="modal">
+    <h2 id="modal-title">New group</h2>
+    <input id="modal-input" placeholder="Group name…" autocomplete="off">
+    <div class="modal-btns">
+      <button class="btn" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-ok">Create</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const LIMIT = 50;
+let state = { done:'', source:'', offset:0, total:0, items:[], groups:[] };
+let dragItem = null;        // active drag item (mouse or touch)
+let touchGhost = null;      // ghost element following finger
+let touchTimer = null;
+let touchEl = null;
+let touchOffsetX = 0, touchOffsetY = 0;
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+function fmt(ts){
+  const d=new Date(ts+'Z');
+  return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+}
+async function api(method,path,body){
+  const r=await fetch(path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
+  return r.json();
+}
+
+function showModal(title,placeholder,onOk){
+  const m=document.getElementById('modal');
+  const inp=document.getElementById('modal-input');
+  document.getElementById('modal-title').textContent=title;
+  inp.placeholder=placeholder; inp.value='';
+  m.style.display='flex';
+  setTimeout(()=>inp.focus(),50);
+  const ok=()=>{ const v=inp.value.trim(); if(v){m.style.display='none';onOk(v);} };
+  const cancel=()=>{ m.style.display='none'; };
+  document.getElementById('modal-ok').onclick=ok;
+  document.getElementById('modal-cancel').onclick=cancel;
+  inp.onkeydown=e=>{ if(e.key==='Enter')ok(); if(e.key==='Escape')cancel(); };
+  m.onclick=e=>{ if(e.target===m)cancel(); };
+}
+
+function getDragAfterElement(container,y){
+  const els=[...container.querySelectorAll('.item:not(.dragging)')];
+  return els.reduce((closest,child)=>{
+    const box=child.getBoundingClientRect();
+    const offset=y-box.top-box.height/2;
+    if(offset<0&&offset>closest.offset) return {offset,element:child};
+    return closest;
+  },{offset:Number.NEGATIVE_INFINITY}).element;
+}
+
+function clearDragUI(){
+  document.querySelectorAll('.drag-over-item,.drag-over-group').forEach(x=>x.classList.remove('drag-over-item','drag-over-group'));
+  document.querySelectorAll('.drop-indicator').forEach(x=>x.remove());
+}
+
+// ghost: the floating element to hide during hit-test (may be null for mouse)
+async function executeDrop(src, targetX, targetY, ghost){
+  // Hide ghost so it doesn't intercept elementFromPoint
+  if(ghost) ghost.style.visibility='hidden';
+  const target=document.elementFromPoint(targetX,targetY);
+  // Remove ghost now — we don't need it anymore
+  if(ghost){ ghost.remove(); }
+
+  if(!target) return;
+  const targetItemEl=target.closest('.item');
+  const targetGroupEl=target.closest('.group');
+  const targetItemsEl=target.closest('.items');
+
+  if(targetItemEl && +targetItemEl.dataset.id!==src.id){
+    const targetGroupId=targetGroupEl ? +targetGroupEl.dataset.gid : null;
+    const targetItemId=+targetItemEl.dataset.id;
+
+    if(src.group_id!=null && src.group_id===targetGroupId){
+      // reorder within same group
+      const itemEls=[...targetItemsEl.querySelectorAll('.item')].filter(x=>+x.dataset.id!==src.id);
+      const orderedIds=[]; let inserted=false;
+      for(const el of itemEls){
+        const box=el.getBoundingClientRect();
+        if(targetY<box.top+box.height/2&&!inserted){orderedIds.push(src.id);inserted=true;}
+        orderedIds.push(+el.dataset.id);
+      }
+      if(!inserted) orderedIds.push(src.id);
+      await api('POST',`/api/groups/${src.group_id}/reorder`,{item_ids:orderedIds});
+      render();
+    } else if(targetGroupId!==null){
+      await api('PATCH',`/api/items/${src.id}`,{group_id:targetGroupId});
+      render();
+    } else {
+      showModal('New group','Group name…',async name=>{
+        const g=await api('POST','/api/groups',{name});
+        await api('PATCH',`/api/items/${src.id}`,{group_id:g.id});
+        await api('PATCH',`/api/items/${targetItemId}`,{group_id:g.id});
+        render();
+      });
+    }
+  } else if(targetGroupEl&&!targetItemEl){
+    const targetGroupId=+targetGroupEl.dataset.gid;
+    if(src.group_id!==targetGroupId){
+      await api('PATCH',`/api/items/${src.id}`,{group_id:targetGroupId});
+      render();
+    }
+  }
+}
+
+function addTouchDrag(el,item){
+  el.addEventListener('touchstart',e=>{
+    if(e.touches.length!==1) return;
+    const touch=e.touches[0];
+    const rect=el.getBoundingClientRect();
+    touchOffsetX=touch.clientX-rect.left;
+    touchOffsetY=touch.clientY-rect.top;
+
+    touchTimer=setTimeout(()=>{
+      dragItem=item;
+      touchEl=el;
+      el.classList.add('dragging');
+      if(navigator.vibrate) navigator.vibrate(15);
+
+      touchGhost=el.cloneNode(true);
+      touchGhost.id='drag-ghost';
+      touchGhost.style.width=rect.width+'px';
+      touchGhost.style.left=(touch.clientX-touchOffsetX)+'px';
+      touchGhost.style.top=(touch.clientY-touchOffsetY)+'px';
+      document.body.appendChild(touchGhost);
+    },350);
+  },{passive:true});
+
+  el.addEventListener('touchmove',e=>{
+    if(!dragItem){ clearTimeout(touchTimer); return; }
+    e.preventDefault();
+    const touch=e.touches[0];
+    touchGhost.style.left=(touch.clientX-touchOffsetX)+'px';
+    touchGhost.style.top=(touch.clientY-touchOffsetY)+'px';
+
+    clearDragUI();
+    // Temporarily hide ghost so we can find what's underneath
+    touchGhost.style.visibility='hidden';
+    const target=document.elementFromPoint(touch.clientX,touch.clientY);
+    touchGhost.style.visibility='';
+    if(!target) return;
+
+    const targetItemEl=target.closest('.item');
+    const targetGroupEl=target.closest('.group');
+    const targetItemsEl=target.closest('.items');
+
+    if(targetItemEl&&+targetItemEl.dataset.id!==dragItem.id){
+      const targetGroupId=targetGroupEl?+targetGroupEl.dataset.gid:null;
+      if(dragItem.group_id!=null&&dragItem.group_id===targetGroupId&&targetItemsEl){
+        const afterEl=getDragAfterElement(targetItemsEl,touch.clientY);
+        const ind=document.createElement('div'); ind.className='drop-indicator';
+        if(afterEl) targetItemsEl.insertBefore(ind,afterEl); else targetItemsEl.appendChild(ind);
+      } else {
+        targetItemEl.classList.add('drag-over-item');
+      }
+    } else if(targetGroupEl&&!targetItemEl){
+      targetGroupEl.classList.add('drag-over-group');
+    }
+  },{passive:false});
+
+  el.addEventListener('touchend',async e=>{
+    clearTimeout(touchTimer);
+    if(!dragItem) return;
+    const touch=e.changedTouches[0];
+    const src=dragItem;
+    const ghost=touchGhost;
+    const srcEl=touchEl;
+
+    dragItem=null; touchGhost=null; touchEl=null;
+    srcEl.classList.remove('dragging');
+    clearDragUI();
+
+    // ghost still in DOM — executeDrop hides it for hit-test then removes it
+    await executeDrop(src,touch.clientX,touch.clientY,ghost);
+  });
+
+  el.addEventListener('touchcancel',()=>{
+    clearTimeout(touchTimer);
+    if(touchGhost){touchGhost.remove();touchGhost=null;}
+    if(touchEl){touchEl.classList.remove('dragging');touchEl=null;}
+    dragItem=null; clearDragUI();
+  });
+}
+
+function makeItem(item,groupId){
+  const inGroup=groupId!==null;
+  const el=document.createElement('div');
+  el.className='item'+(item.done?' done':'');
+  el.dataset.id=item.id;
+  el.draggable=true;
+  const tags=item.tags?item.tags.split(',').filter(Boolean).map(t=>`<span class="tag">${esc(t.trim())}</span>`).join(''):'';
+  const rawDiff=item.raw_text&&item.raw_text!==item.summary;
+  el.innerHTML=`
+    <input type="checkbox" class="cb" ${item.done?'checked':''}>
+    <div class="item-body">
+      <div class="summary">${esc(item.summary||item.raw_text)}</div>
+      ${rawDiff?`<div class="raw">${esc(item.raw_text)}</div>`:''}
+      <div class="meta">
+        <span class="source-badge">${esc(item.source)}</span>
+        ${tags}<span>${fmt(item.created_at)}</span>
+        ${inGroup?`<button class="ungroup-btn">✕ ungroup</button>`:''}
+      </div>
+    </div>`;
+
+  el.querySelector('.cb').addEventListener('change',e=>{
+    el.classList.toggle('done',e.target.checked);
+    api('PATCH',`/api/items/${item.id}`,{done:e.target.checked});
+  });
+  const raw=el.querySelector('.raw');
+  if(raw) raw.addEventListener('click',()=>raw.classList.toggle('expanded'));
+  if(inGroup){
+    el.querySelector('.ungroup-btn').addEventListener('click',async()=>{
+      await api('PATCH',`/api/items/${item.id}`,{ungroup:true}); render();
+    });
+  }
+
+  // mouse drag
+  el.addEventListener('dragstart',e=>{ dragItem=item; el.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
+  el.addEventListener('dragend',()=>{ dragItem=null; el.classList.remove('dragging'); clearDragUI(); });
+  el.addEventListener('dragover',e=>{
+    if(!dragItem||dragItem.id===item.id) return;
+    if(dragItem.group_id!=null&&dragItem.group_id===groupId) return;
+    e.preventDefault(); el.classList.add('drag-over-item');
+  });
+  el.addEventListener('dragleave',()=>el.classList.remove('drag-over-item'));
+  el.addEventListener('drop',async e=>{
+    el.classList.remove('drag-over-item');
+    if(!dragItem||dragItem.id===item.id) return;
+    if(dragItem.group_id!=null&&dragItem.group_id===groupId) return;
+    e.preventDefault(); e.stopPropagation();
+    const src=dragItem; dragItem=null;
+    if(groupId!==null){
+      await api('PATCH',`/api/items/${src.id}`,{group_id:groupId}); render();
+    } else {
+      showModal('New group','Group name…',async name=>{
+        const g=await api('POST','/api/groups',{name});
+        await api('PATCH',`/api/items/${src.id}`,{group_id:g.id});
+        await api('PATCH',`/api/items/${item.id}`,{group_id:g.id});
+        render();
+      });
+    }
+  });
+
+  addTouchDrag(el,item);
+  return el;
+}
+
+function makeGroup(group){
+  const el=document.createElement('div');
+  el.className='group'; el.dataset.gid=group.id;
+  el.innerHTML=`
+    <div class="group-header">
+      <span class="group-name" contenteditable="true">${esc(group.name)}</span>
+      <small style="color:var(--muted);font-size:0.75rem">${group.items.length}</small>
+      <button class="group-del btn">✕</button>
+    </div>
+    <div class="group-body"><div class="items"></div></div>`;
+
+  const nameEl=el.querySelector('.group-name');
+  nameEl.addEventListener('blur',()=>{ const n=nameEl.textContent.trim(); if(n&&n!==group.name) api('PATCH',`/api/groups/${group.id}`,{name:n}); });
+  nameEl.addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();nameEl.blur();} });
+  el.querySelector('.group-del').addEventListener('click',async()=>{
+    if(confirm(`Delete group "${group.name}"? Items will be ungrouped.`)){ await api('DELETE',`/api/groups/${group.id}`); render(); }
+  });
+
+  const itemsEl=el.querySelector('.items');
+  group.items.forEach(item=>itemsEl.appendChild(makeItem(item,group.id)));
+  if(!group.items.length) itemsEl.innerHTML='<div style="padding:.5rem;font-size:.8rem;color:var(--muted)">empty</div>';
+
+  // mouse reorder within group
+  itemsEl.addEventListener('dragover',e=>{
+    if(!dragItem||dragItem.group_id!==group.id) return;
+    e.preventDefault(); e.stopPropagation();
+    const afterEl=getDragAfterElement(itemsEl,e.clientY);
+    itemsEl.querySelectorAll('.drop-indicator').forEach(x=>x.remove());
+    const ind=document.createElement('div'); ind.className='drop-indicator';
+    if(afterEl) itemsEl.insertBefore(ind,afterEl); else itemsEl.appendChild(ind);
+  });
+  itemsEl.addEventListener('dragleave',e=>{ if(!itemsEl.contains(e.relatedTarget)) itemsEl.querySelectorAll('.drop-indicator').forEach(x=>x.remove()); });
+  itemsEl.addEventListener('drop',async e=>{
+    itemsEl.querySelectorAll('.drop-indicator').forEach(x=>x.remove());
+    if(!dragItem||dragItem.group_id!==group.id) return;
+    e.preventDefault(); e.stopPropagation();
+    const src=dragItem; dragItem=null;
+    const afterEl=getDragAfterElement(itemsEl,e.clientY);
+    const itemEls=[...itemsEl.querySelectorAll('.item:not(.dragging)')];
+    const orderedIds=[]; let inserted=false;
+    for(const el of itemEls){ if(el===afterEl&&!inserted){orderedIds.push(src.id);inserted=true;} orderedIds.push(+el.dataset.id); }
+    if(!inserted) orderedIds.push(src.id);
+    await api('POST',`/api/groups/${group.id}/reorder`,{item_ids:orderedIds});
+    render();
+  });
+
+  // mouse drop from outside
+  el.addEventListener('dragover',e=>{ if(dragItem&&dragItem.group_id!==group.id){e.preventDefault();el.classList.add('drag-over-group');} });
+  el.addEventListener('dragleave',e=>{ if(!el.contains(e.relatedTarget)) el.classList.remove('drag-over-group'); });
+  el.addEventListener('drop',async e=>{
+    el.classList.remove('drag-over-group');
+    if(!dragItem||dragItem.group_id===group.id) return;
+    e.preventDefault();
+    const src=dragItem; dragItem=null;
+    await api('PATCH',`/api/items/${src.id}`,{group_id:group.id}); render();
+  });
+
+  return el;
+}
+
+async function render(append=false){
+  if(!append){state.offset=0;state.items=[];}
+  const params=new URLSearchParams({limit:LIMIT,offset:state.offset});
+  if(state.done!=='') params.set('done',state.done);
+  if(state.source) params.set('source',state.source);
+
+  const [itemsData,groups]=await Promise.all([api('GET','/api/items?'+params),api('GET','/api/groups')]);
+  state.total=itemsData.total;
+  state.items=append?[...state.items,...itemsData.items]:itemsData.items;
+  state.offset=state.items.length;
+  state.groups=groups;
+
+  const groupedIds=new Set(groups.flatMap(g=>g.items.map(i=>i.id)));
+  const ungrouped=state.items.filter(i=>!groupedIds.has(i.id));
+
+  const gc=document.getElementById('groups-container');
+  gc.innerHTML='';
+  groups.forEach(g=>gc.appendChild(makeGroup(g)));
+
+  const uc=document.getElementById('ungrouped');
+  uc.innerHTML='';
+  if(ungrouped.length){
+    if(groups.length){const lbl=document.createElement('div');lbl.className='section-label';lbl.textContent='ungrouped';uc.appendChild(lbl);}
+    ungrouped.forEach(item=>uc.appendChild(makeItem(item,null)));
+  }
+  if(!groups.length&&!ungrouped.length) uc.innerHTML='<div class="empty">nothing here</div>';
+  document.getElementById('count').textContent=`${state.total} items`;
+  document.getElementById('loadMore').style.display=state.items.length<state.total?'':'none';
+}
+
+async function loadSources(){
+  const sources=await api('GET','/api/sources');
+  const filters=document.getElementById('filters');
+  const countEl=document.getElementById('count');
+  sources.forEach(src=>{
+    const btn=document.createElement('button');
+    btn.className='chip';btn.dataset.source=src;btn.textContent=src;
+    filters.insertBefore(btn,countEl);
+  });
+}
+
+document.getElementById('filters').addEventListener('click',e=>{
+  const chip=e.target.closest('.chip');if(!chip)return;
+  if('done' in chip.dataset){
+    document.querySelectorAll('[data-done]').forEach(c=>c.classList.remove('active'));
+    chip.classList.add('active');state.done=chip.dataset.done;
+  } else if('source' in chip.dataset){
+    document.querySelectorAll('[data-source]').forEach(c=>c.classList.remove('active'));
+    chip.classList.add('active');state.source=chip.dataset.source;
+  }
+  render();
+});
+
+document.getElementById('refreshBtn').addEventListener('click',()=>render());
+document.getElementById('loadMore').addEventListener('click',()=>render(true));
+loadSources().then(()=>render());
+</script>
+</body>
+</html>

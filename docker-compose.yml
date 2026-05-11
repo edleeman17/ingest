@@ -1,0 +1,40 @@
+services:
+  api:
+    build: ./app
+    container_name: ingest-api
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ:-UTC}
+      - OLLAMA_HOST=${OLLAMA_HOST}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
+    volumes:
+      - ./db:/db
+      - ./static:/static:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ingest.rule=Host(`${INGEST_HOST:-ingest.lan}`)"
+      - "traefik.http.routers.ingest.tls=true"
+      - "traefik.http.routers.ingest.entrypoints=websecure"
+      - "traefik.http.services.ingest.loadbalancer.server.port=8000"
+    networks:
+      - traefik
+
+  bot:
+    build: ./app
+    container_name: ingest-bot
+    restart: unless-stopped
+    command: python -m bot.main
+    environment:
+      - TZ=${TZ:-UTC}
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
+      - INGEST_URL=http://api:8000/ingest
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - api
+    networks:
+      - traefik
+
+networks:
+  traefik:
+    external: true

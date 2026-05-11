@@ -1,0 +1,21 @@
+# Secrets
+.env
+
+# Database (real data)
+db/*.db
+
+# Personal CA cert and signed shortcuts (device-specific)
+static/rootCA.crt
+static/*.shortcut
+
+# SSH keys
+ssh/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# macOS
+.DS_Store
