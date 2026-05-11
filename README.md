@@ -41,7 +41,7 @@ That's it. Everything else is optional.
 ## Quick start
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/ingest
+git clone https://github.com/edleeman17/ingest
 cd ingest
 cp .env.example .env
 docker compose up -d api
