@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from shared.models import IngestRequest, IngestResponse
 from api.db import init_db, insert_item
 from api.ollama import ocr_image, summarise
+from api.config import feature
 from api.items import list_items, set_done, set_group, set_positions, list_sources, list_groups, create_group, rename_group, delete_group
 
 logger = logging.getLogger(__name__)
@@ -118,25 +119,32 @@ async def reorder_group(group_id: int, body: ReorderBody):
 @app.post("/ingest", response_model=IngestResponse, tags=["ingest"], summary="Ingest a new item")
 async def ingest(req: IngestRequest):
     """
-    Accepts text, base64 image (OCR'd with Tesseract), or both.
-    Summarises via Ollama and stores in SQLite.
+    Accepts text, base64 image (OCR'd with Tesseract if ocr feature enabled), or both.
+    Summarises via Ollama if llm feature enabled, otherwise stores raw text as summary.
     """
     raw_text = req.raw_text.strip()
     ocr_text = None
-    if req.image_data:
+
+    if req.image_data and feature("ocr"):
         try:
             loop = asyncio.get_event_loop()
             ocr_text = await loop.run_in_executor(None, ocr_image, req.image_data)
             raw_text = f"{raw_text}\n\n[Image text: {ocr_text}]" if raw_text else ocr_text
         except Exception:
             logger.exception("OCR failed")
+
     if not raw_text:
         raise HTTPException(status_code=400, detail="No text or image content provided")
-    try:
-        summary, tags = await summarise(raw_text)
-    except Exception:
-        logger.exception("summarise failed")
-        summary, tags = raw_text[:80], []
+
+    if feature("llm"):
+        try:
+            summary, tags = await summarise(raw_text)
+        except Exception:
+            logger.exception("summarise failed")
+            summary, tags = raw_text[:120], []
+    else:
+        summary, tags = raw_text[:120], []
+
     item_id = await insert_item(req.source, raw_text, summary, tags)
     return IngestResponse(id=item_id, summary=summary, tags=tags, ocr_text=ocr_text)
 
@@ -144,7 +152,8 @@ async def ingest(req: IngestRequest):
 # ── Misc ──────────────────────────────────────────────────────────────────────
 @app.get("/health", tags=["meta"])
 async def health():
-    return {"status": "ok"}
+    enabled = {name: feature(name) for name in ("llm", "ocr")}
+    return {"status": "ok", "features": enabled}
 
 @app.get("/shortcuts", response_class=HTMLResponse, include_in_schema=False)
 async def shortcuts_page():
@@ -169,3 +178,9 @@ async def root_ca():
     if not p.exists():
         raise HTTPException(404, "No CA cert configured")
     return Response(p.read_bytes(), media_type="application/x-x509-ca-cert")
+
+
+@app.get("/api/config", tags=["meta"], summary="Active feature flags")
+async def get_config():
+    """Returns which features are enabled. Safe to expose on LAN."""
+    return {"features": {name: feature(name) for name in ("llm", "ocr", "web_ingest")}}

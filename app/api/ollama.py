@@ -7,7 +7,7 @@ import os
 import pytesseract
 from PIL import Image
 
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://192.168.1.95:11434")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 
 _SUMMARISE_SYSTEM = (

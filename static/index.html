@@ -66,11 +66,14 @@ main{max-width:900px;margin:0 auto;padding:1.5rem}
 .modal-btns{display:flex;gap:0.5rem;justify-content:flex-end}
 .btn-primary{background:var(--text);color:var(--bg);border-color:var(--text)}
 .btn-primary:hover{opacity:0.85;background:var(--text)}
+.modal textarea{width:100%;padding:0.75rem;font:inherit;font-size:0.875rem;background:var(--bg2);border:1px solid var(--border);border-radius:4px;color:var(--text);resize:vertical;min-height:6rem}
+.ingest-source{width:100%;padding:0.5rem 0.75rem;font:inherit;font-size:0.875rem;background:var(--bg2);border:1px solid var(--border);border-radius:4px;color:var(--muted)}
 </style>
 </head>
 <body>
 <header>
   <h1>ingest</h1>
+  <button class="btn" id="ingestBtn" style="display:none" title="Add item">+</button>
   <button class="btn" id="refreshBtn">↺</button>
 </header>
 <main>
@@ -93,6 +96,17 @@ main{max-width:900px;margin:0 auto;padding:1.5rem}
     <div class="modal-btns">
       <button class="btn" id="modal-cancel">Cancel</button>
       <button class="btn btn-primary" id="modal-ok">Create</button>
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop" id="ingest-modal" style="display:none">
+  <div class="modal" style="width:min(480px,95vw)">
+    <h2>Add item</h2>
+    <textarea id="ingest-text" placeholder="What do you need to do or remember?" autocomplete="off"></textarea>
+    <input id="ingest-source" class="ingest-source" placeholder="source (default: manual)" autocomplete="off">
+    <div class="modal-btns">
+      <button class="btn" id="ingest-cancel">Cancel</button>
+      <button class="btn btn-primary" id="ingest-ok">Add</button>
     </div>
   </div>
 </div>
@@ -452,7 +466,38 @@ document.getElementById('filters').addEventListener('click',e=>{
 
 document.getElementById('refreshBtn').addEventListener('click',()=>render());
 document.getElementById('loadMore').addEventListener('click',()=>render(true));
-loadSources().then(()=>render());
+
+// ── Web ingest modal ──────────────────────────────────────────────────────────
+function showIngestModal(){
+  const m=document.getElementById('ingest-modal');
+  const txt=document.getElementById('ingest-text');
+  const src=document.getElementById('ingest-source');
+  txt.value=''; src.value='';
+  m.style.display='flex';
+  setTimeout(()=>txt.focus(),50);
+  const submit=async()=>{
+    const text=txt.value.trim(); if(!text) return;
+    const source=src.value.trim()||'manual';
+    m.style.display='none';
+    await api('POST','/ingest',{source,raw_text:text});
+    render();
+  };
+  const cancel=()=>{ m.style.display='none'; };
+  document.getElementById('ingest-ok').onclick=submit;
+  document.getElementById('ingest-cancel').onclick=cancel;
+  txt.onkeydown=e=>{ if(e.key==='Escape')cancel(); };
+  m.onclick=e=>{ if(e.target===m)cancel(); };
+}
+document.getElementById('ingestBtn').addEventListener('click',showIngestModal);
+
+async function loadConfig(){
+  try{
+    const cfg=await api('GET','/api/config');
+    if(cfg.features?.web_ingest) document.getElementById('ingestBtn').style.display='';
+  }catch(e){}
+}
+
+Promise.all([loadSources(),loadConfig()]).then(()=>render());
 </script>
 </body>
 </html>

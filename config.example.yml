@@ -1,0 +1,11 @@
+features:
+  # Summarise ingested content with a local Ollama model.
+  # Requires OLLAMA_HOST env var. If disabled, raw_text is stored as-is.
+  llm: true
+
+  # OCR images using Tesseract. If disabled, image_data in /ingest requests is ignored.
+  ocr: true
+
+  # Show a text input form in the PWA to ingest directly from the browser.
+  # Useful for desktop use. Disabled by default.
+  web_ingest: false
