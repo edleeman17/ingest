@@ -2,7 +2,7 @@
 
 Capture actionable messages from anywhere — Discord, iOS share sheet, screenshots, or any HTTP client — into a LAN-hosted, AI-summarised todo list. No cloud. No API key. Runs on a Raspberry Pi.
 
-![PWA screenshot](docs/screenshot.png)
+![PWA screenshot](docs/screenshot.jpg)
 
 ## What it does
 
