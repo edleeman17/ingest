@@ -49,7 +49,7 @@ main{max-width:900px;margin:0 auto;padding:1.5rem}
 .item-body{display:flex;flex-direction:column;gap:0.375rem;min-width:0}
 .summary{font-size:0.9375rem;font-weight:600;word-break:break-word}
 .raw{font-size:0.8125rem;color:var(--muted);border-left:1px solid var(--border);padding-left:0.625rem;white-space:pre-wrap;word-break:break-word;font-style:italic;max-height:4rem;overflow:hidden;cursor:pointer;transition:max-height 200ms}
-.raw.expanded{max-height:none}
+.raw.expanded{max-height:none}.links{display:flex;flex-direction:column;gap:0.25rem;margin-top:0.375rem}.links a{font-size:0.75rem;color:var(--accent,#4a9eff);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;text-decoration:none}.links a:hover{text-decoration:underline}
 .meta{display:flex;gap:0.375rem;flex-wrap:wrap;align-items:center;font-size:0.75rem;color:var(--muted)}
 .source-badge{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:0.1rem 0.35rem}
 .tag::before{content:'#'}
@@ -295,12 +295,16 @@ function makeItem(item,groupId){
   el.dataset.id=item.id;
   el.draggable=true;
   const tags=item.tags?item.tags.split(',').filter(Boolean).map(t=>`<span class="tag">${esc(t.trim())}</span>`).join(''):'';
-  const rawDiff=item.raw_text&&item.raw_text!==item.summary;
+  const full=item.raw_text||item.summary||'';
+  const short=full.length>100?full.slice(0,100).trimEnd()+'\u2026':full;
+  const showRaw=full.length>100;
+  const links=[...full.matchAll(/https?:\/\/[^\s)>"]+/g)].map(m=>m[0]);
   el.innerHTML=`
     <input type="checkbox" class="cb" ${item.done?'checked':''}>
     <div class="item-body">
-      <div class="summary">${esc(item.summary||item.raw_text)}</div>
-      ${rawDiff?`<div class="raw">${esc(item.raw_text)}</div>`:''}
+      <div class="summary">${esc(short)}</div>
+      ${showRaw?`<div class="raw">${esc(full)}</div>`:''}
+      ${links.length?`<div class="links">${links.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join('')}</div>`:''}
       <div class="meta">
         <span class="source-badge">${esc(item.source)}</span>
         ${tags}<span>${fmt(item.created_at)}</span>
