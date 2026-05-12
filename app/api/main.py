@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response, FileResponse
 from pydantic import BaseModel
 
@@ -12,7 +12,7 @@ from shared.models import IngestRequest, IngestResponse
 from api.db import init_db, insert_item
 from api.ollama import ocr_image, summarise
 from api.config import feature
-from api.items import list_items, set_done, set_group, set_positions, list_sources, list_groups, create_group, rename_group, delete_group
+from api.items import list_items, set_done, set_group, set_positions, list_sources, list_groups, create_group, rename_group, delete_group, enrich_item
 
 logger = logging.getLogger(__name__)
 STATIC_DIR = Path("/static")
@@ -116,37 +116,36 @@ async def reorder_group(group_id: int, body: ReorderBody):
 
 
 # ── Ingest ────────────────────────────────────────────────────────────────────
-@app.post("/ingest", response_model=IngestResponse, tags=["ingest"], summary="Ingest a new item")
-async def ingest(req: IngestRequest):
-    """
-    Accepts text, base64 image (OCR'd with Tesseract if ocr feature enabled), or both.
-    Summarises via Ollama if llm feature enabled, otherwise stores raw text as summary.
-    """
-    raw_text = req.raw_text.strip()
-    ocr_text = None
-
-    if req.image_data and feature("ocr"):
+async def _enrich(item_id: int, raw_text: str, image_data):
+    text = raw_text
+    if image_data and feature("ocr"):
         try:
             loop = asyncio.get_event_loop()
-            ocr_text = await loop.run_in_executor(None, ocr_image, req.image_data)
-            raw_text = f"{raw_text}\n\n[Image text: {ocr_text}]" if raw_text else ocr_text
+            ocr_text = await loop.run_in_executor(None, ocr_image, image_data)
+            text = (text + "\n\n[Image text: " + ocr_text + "]") if text else ocr_text
         except Exception:
             logger.exception("OCR failed")
-
-    if not raw_text:
-        raise HTTPException(status_code=400, detail="No text or image content provided")
-
     if feature("llm"):
         try:
-            summary, tags = await summarise(raw_text)
+            summary, tags = await summarise(text)
         except Exception:
             logger.exception("summarise failed")
-            summary, tags = raw_text[:120], []
+            summary, tags = text[:120], []
     else:
-        summary, tags = raw_text[:120], []
+        summary, tags = text[:120], []
+    await enrich_item(item_id, summary, tags)
 
-    item_id = await insert_item(req.source, raw_text, summary, tags)
-    return IngestResponse(id=item_id, summary=summary, tags=tags, ocr_text=ocr_text)
+
+@app.post("/ingest", response_model=IngestResponse, tags=["ingest"], summary="Ingest a new item")
+async def ingest(req: IngestRequest, background_tasks: BackgroundTasks):
+    """Saves immediately and returns. OCR and LLM summarisation run in the background."""
+    raw_text = (req.raw_text or "").strip()
+    if not raw_text and not req.image_data:
+        raise HTTPException(status_code=400, detail="No text or image content provided")
+    item_id = await insert_item(req.source, raw_text, raw_text[:120], [])
+    background_tasks.add_task(_enrich, item_id, raw_text, req.image_data)
+    return IngestResponse(id=item_id, summary=raw_text[:120], tags=[], ocr_text=None)
+
 
 
 # ── Misc ──────────────────────────────────────────────────────────────────────

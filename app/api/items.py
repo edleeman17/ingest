@@ -81,3 +81,12 @@ async def delete_group(group_id: int):
         await db.execute("UPDATE items SET group_id=NULL, position=NULL WHERE group_id=?", (group_id,))
         await db.execute("DELETE FROM groups WHERE id=?", (group_id,))
         await db.commit()
+
+
+async def enrich_item(item_id: int, summary: str, tags: list[str]):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE items SET summary=?, tags=? WHERE id=?",
+            (summary, ",".join(tags), item_id)
+        )
+        await db.commit()
